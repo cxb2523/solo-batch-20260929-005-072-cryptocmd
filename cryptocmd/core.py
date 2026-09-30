@@ -241,6 +241,10 @@ class CmcScraper(object):
             errno, strerror = err.args
             print("I/O error({0}): {1}".format(errno, strerror))
 
+    def to_csv_bytes(self, **kwargs):
+        """Return the exact byte stream ``export('csv')`` writes (tablib)."""
+        return self.get_data("csv", **kwargs).encode("utf-8")
+
     def export(self, format, name=None, path=None, **kwargs):
         """
         Exports the data to specified file format

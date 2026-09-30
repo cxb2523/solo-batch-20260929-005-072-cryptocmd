@@ -90,6 +90,67 @@ df = scraper.get_dataframe()
 ##### Following are the columns of the data
 
 `Date, Open, High, Low, Close, Volume, Market Cap, Time Open, Time High, Time Low, Time Close`
+## Exchange backends (dispatch)
+
+Data fetching is decoupled from CoinMarketCap and dispatched per exchange:
+`cryptocmd` only selects a backend by name, and each exchange lives in its own
+module under `cryptocmd/exchanges/`. Adding an exchange means adding one file —
+the package core never changes.
+
+```python
+from cryptocmd import get_scraper
+
+# same CmcScraper-compatible surface for every backend
+scraper = get_scraper("bitstamp", "BTC", "15-12-2023", "15-01-2024", fiat="USD")
+headers, rows = scraper.get_data()
+scraper.export("csv", name="btc_bitstamp")
+
+# the legacy CMC path is the default and remains unchanged
+cmc = get_scraper("cmc", "BTC")          # equivalent to CmcScraper("BTC")
+```
+
+Built-in backends: `cmc` / `coinmarketcap` (legacy, default) and `bitstamp`.
+All backends emit the exact same columns, `Date` index and CSV bytes as CMC.
+
+Pipeline guarantees:
+
+- ranges wider than a single request are sliced on **UTC day boundaries** with
+  no gap or overlap;
+- HTTP `429` responses use **exponential backoff**;
+- each daily candle is persisted idempotently (one file per UTC day), so a
+  re-fetch never writes the same candle twice;
+- missing days / trading halts follow one pipeline-wide policy selected with
+  `CRYPTOCMD_MISSING_POLICY`: `nan` (default, retain NaN rows) or `ffill`
+  (forward fill). There is deliberately no other option.
+
+### Registering a third-party backend
+
+Either register at runtime:
+
+```python
+from cryptocmd import register_backend, Backend
+register_backend("myexchange", Backend("myexchange", MyScraper))
+```
+
+…or declare the `cryptocmd.exchanges` entry point in your package metadata.
+
+## Local server
+
+`cryptocmd/server.py` serves OHLCV locally:
+
+- `GET /health` → `ok`
+- `GET /ohlcv?exchange=bitstamp&coin=btc&fiat=usd&range=30d` → CSV (or
+  `format=json`; `range` is one of `7d`, `30d`, `90d`, `all`, or pass explicit
+  `start`/`end` as `dd-mm-yyyy`)
+- `GET /` → a dashboard with range switching and a missing-point counter
+
+```sh
+python -m cryptocmd.server --fixtures        # offline, deterministic (tests)
+python -m cryptocmd.server --exchange bitstamp
+```
+
+The acceptance gate is `scripts/verify.sh`: it checks `/health`, byte-diffs
+`/ohlcv` against the frozen baseline CSV, and runs the regression suite.
 
 ## Acknowledgements
 

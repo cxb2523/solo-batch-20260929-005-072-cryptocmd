@@ -2,5 +2,6 @@ include README.md
 include LICENSE
 include pyproject.toml
 include poetry.lock
+include cryptocmd/exchanges/fixtures/*.json
 
 global-exclude *.py[cdo] __pycache__ *.so *.pyd
