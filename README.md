@@ -118,3 +118,50 @@ below. ✨☕
 [GitHub Sponsors]: https://img.shields.io/github/sponsors/guptarohit?color=%23FF5733
 [6]: https://github.com/sponsors/guptarohit
 [![Buy Me A Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=rohitgupta&button_colour=5F7FFF&font_colour=ffffff&font_family=Lato&outline_colour=000000&coffee_colour=FFDD00)](https://www.buymeacoffee.com/rohitgupta)
+
+### Exchange backends (dispatch)
+
+`cryptocmd` dispatches fetching to a backend by exchange name. The legacy
+CoinMarketCap path is unchanged and registered as the `cmc` backend;
+Bitstamp is available as `bitstamp`:
+
+```python
+import cryptocmd
+
+headers, rows = cryptocmd.fetch_ohlcv(
+    "bitstamp", "btcusd", start_date="01-01-2024", end_date="10-01-2024"
+)
+```
+
+All backends emit the same column schema as `CmcScraper`. Ranges wider
+than a single request's candle cap are sliced on UTC day boundaries,
+HTTP 429 responses are retried with exponential backoff, CSV writes are
+idempotent (de-duplicated by date, atomic replace), and missing days /
+halts are kept as NaN rows (never forward-filled) across the pipeline.
+
+Third-party exchanges can be registered without touching cryptocmd's core:
+
+```python
+cryptocmd.register_exchange("myexchange", my_backend)  # needs .fetch_ohlcv(...)
+```
+
+### Local server
+
+```sh
+python -m cryptocmd.server --port 8000
+```
+
+- `GET /health` — plain text `ok`
+- `GET /ohlcv?exchange=bitstamp&symbol=btcusd&start=01-01-2024&end=10-01-2024` — CSV
+- `GET /` — market page with range switching and a missing-point counter
+
+### Verifying a build
+
+```sh
+scripts/verify.sh
+```
+
+Starts the server (fixture-backed, no live network needed), checks
+`/health`, byte-diffs `/ohlcv` against the baseline CSV in
+`tests/baseline/`, and runs the regression tests. Non-zero exit means the
+build does not ship.
